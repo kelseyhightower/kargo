@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -51,7 +50,7 @@ func build(name string) (string, error) {
 
 	data, err := cmd.CombinedOutput()
 	if err != nil {
-		log.Println(string(data))
+		fmt.Println(string(data))
 		return "", err
 	}
 
@@ -60,13 +59,13 @@ func build(name string) (string, error) {
 
 func Upload(config UploadConfig) (string, error) {
 	if config.Path == "" {
-		log.Printf("Building %s binary...", config.ObjectName)
+		fmt.Printf("Building %s binary...\n", config.ObjectName)
 		output, err := build(config.ObjectName)
 		if err != nil {
 			return "", err
 		}
 		config.Path = output
-		log.Println("Created: " + config.Path)
+		fmt.Println("Created: " + config.Path)
 	}
 
 	client, err := google.DefaultClient(context.Background(), scope)
@@ -111,7 +110,7 @@ func Upload(config UploadConfig) (string, error) {
 
 	if object != nil {
 		if object.HTTPStatusCode == 200 {
-			log.Printf("Object %s already exists, skipping upload.", filepath.Join(config.BucketName, objectName))
+			fmt.Printf("Object %s already exists, skipping upload.\n", filepath.Join(config.BucketName, objectName))
 			return publicLink, nil
 		}
 	}
@@ -135,11 +134,11 @@ func Upload(config UploadConfig) (string, error) {
 		Metadata: metadata,
 	}
 
-	log.Printf("Uploading %s to the %s bucket...", object.Name, config.BucketName)
+	fmt.Printf("Uploading %s to the %s bucket...\n", object.Name, config.BucketName)
 	_, err = service.Objects.Insert(config.BucketName, object).Media(f).Do()
 	if err != nil {
 		return "", err
 	}
-	log.Println("Upload complete.")
+	fmt.Println("Upload complete.")
 	return publicLink, nil
 }

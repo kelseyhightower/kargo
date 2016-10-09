@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -15,7 +14,6 @@ import (
 )
 
 var (
-	apiHost             = "127.0.0.1:8001"
 	replicasetsEndpoint = "/apis/extensions/v1beta1/namespaces/%s/replicasets"
 	replicasetEndpoint  = "/apis/extensions/v1beta1/namespaces/%s/replicasets/%s"
 	scaleEndpoint       = "/apis/extensions/v1beta1/namespaces/%s/replicasets/%s/scale"
@@ -43,7 +41,6 @@ func getPods(namespace, labelSelector string) (*PodList, error) {
 		},
 	}
 	request.Header.Set("Accept", "application/json, */*")
-	log.Println(request.URL.String())
 
 	resp, err := http.DefaultClient.Do(request)
 	if err != nil {
@@ -51,7 +48,7 @@ func getPods(namespace, labelSelector string) (*PodList, error) {
 	}
 
 	if resp.StatusCode == 404 {
-		log.Println("GET pods error: ", ErrNotExist)
+		fmt.Println("GET pods error: ", ErrNotExist)
 		return nil, ErrNotExist
 	}
 	if resp.StatusCode != 200 {
@@ -99,13 +96,12 @@ func getLogs(config DeploymentConfig, w io.Writer) error {
 			},
 		}
 		request.Header.Set("Accept", "application/json, */*")
-		log.Println(request.URL.String())
 
 		go func() {
 			for {
 				resp, err := http.DefaultClient.Do(request)
 				if err != nil {
-					log.Println(err)
+					fmt.Println(err)
 					time.Sleep(5 * time.Second)
 					continue
 				}
@@ -113,24 +109,23 @@ func getLogs(config DeploymentConfig, w io.Writer) error {
 				if resp.StatusCode == 404 {
 					data, err := ioutil.ReadAll(resp.Body)
 					if err != nil {
-						log.Println(err)
+						fmt.Println(err)
 						time.Sleep(5 * time.Second)
 						continue
 					}
-					log.Println(string(data))
-					log.Println("GET pod logs error: ", ErrNotExist)
-					log.Println(ErrNotExist)
+					fmt.Println(string(data))
+					fmt.Println("GET pod logs error: ", ErrNotExist)
 					time.Sleep(5 * time.Second)
 					continue
 				}
 				if resp.StatusCode != 200 {
-					log.Println(errors.New("Get replica set error non 200 reponse: " + resp.Status))
+					fmt.Println(errors.New("Get replica set error non 200 reponse: " + resp.Status))
 					time.Sleep(5 * time.Second)
 					continue
 				}
 
 				if _, err := io.Copy(w, resp.Body); err != nil {
-					log.Println(err)
+					fmt.Println(err)
 				}
 			}
 		}()
@@ -248,7 +243,7 @@ func scaleReplicaSet(namespace, name string, replicas int) error {
 		if err != nil {
 			return err
 		}
-		log.Println(string(data))
+		fmt.Println(string(data))
 		return errors.New("Scale ReplicaSet error non 200 reponse: " + resp.Status)
 	}
 
@@ -432,7 +427,7 @@ func createReplicaSet(config DeploymentConfig) error {
 		if err != nil {
 			return err
 		}
-		log.Println(string(data))
+		fmt.Println(string(data))
 		return errors.New("ReplicaSet: Unexpected HTTP status code" + resp.Status)
 	}
 

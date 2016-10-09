@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	apiServer        string
+	apiHost          string
 	cpuLimit         string
 	cpuRequest       string
 	memoryLimit      string
@@ -17,7 +17,7 @@ var (
 )
 
 func init() {
-	flag.StringVar(&apiServer, "api-server", "http://127.0.0.1:8001", "Kubernetes API server")
+	flag.StringVar(&apiHost, "api-host", "127.0.0.1:8001", "Kubernetes API server")
 	flag.StringVar(&cpuLimit, "cpu-limit", "100m", "Max CPU in milicores")
 	flag.StringVar(&cpuRequest, "cpu-request", "100m", "Min CPU in milicores")
 	flag.StringVar(&memoryLimit, "memory-limit", "64M", "Max memory in MB")
@@ -43,12 +43,12 @@ type DeploymentConfig struct {
 }
 
 type DeploymentManager struct {
-	APIServerURL string
-	config       DeploymentConfig
+	apiHost string
+	config  DeploymentConfig
 }
 
-func New(url string) *DeploymentManager {
-	return &DeploymentManager{APIServerURL: url}
+func New() *DeploymentManager {
+	return &DeploymentManager{apiHost: apiHost}
 }
 
 func (dm *DeploymentManager) Create(config DeploymentConfig) error {
