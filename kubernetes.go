@@ -5,19 +5,66 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"time"
 )
 
 var (
 	apiHost             = "127.0.0.1:8001"
 	replicasetsEndpoint = "/apis/extensions/v1beta1/namespaces/default/replicasets"
+	logsEndpoint        = "/api/v1/namespaces/%s/pods/%s/log"
 )
 
 var ErrNotExist = errors.New("does not exist")
+
+func getLogs(name, namespace string) (io.Reader, error) {
+	var b bytes.Buffer
+
+	v := url.Values{}
+	v.Set("follow", "true")
+
+	path := fmt.Sprintf(logsEndpoint, namespace, name)
+	request := &http.Request{
+		Header: make(http.Header),
+		Method: http.MethodGet,
+		URL: &url.URL{
+			Host:     apiHost,
+			Path:     path,
+			Scheme:   "http",
+			RawQuery: v.Encode(),
+		},
+	}
+
+	request.Header.Set("Accept", "application/json, */*")
+
+	go func() {
+		for {
+			resp, err := http.DefaultClient.Do(request)
+			if err != nil {
+				time.Sleep(10 * time.Second)
+				log.Println(err)
+			}
+
+			if resp.StatusCode == 404 {
+				log.Println(ErrNotExist)
+			}
+			if resp.StatusCode != 200 {
+				log.Println(errors.New("Get deployment error non 200 reponse: " + resp.Status))
+			}
+
+			if _, err := io.Copy(&b, resp.Body); err != nil {
+				log.Println(err)
+			}
+		}
+	}()
+
+	return &b, nil
+}
 
 func getReplicaSet(name string) (*ReplicaSet, error) {
 	var rs ReplicaSet
@@ -182,12 +229,12 @@ func createReplicaSet(config DeploymentConfig) error {
 	volumeMounts := make([]VolumeMount, 0)
 	volumeMounts = append(volumeMounts, VolumeMount{
 		Name:      "bin",
-		MountPath: "/bin",
+		MountPath: "/opt/bin",
 	})
 
 	container := Container{
 		Args:         config.Args,
-		Command:      []string{filepath.Join("/", config.Name)},
+		Command:      []string{filepath.Join("/opt/bin", config.Name)},
 		Image:        "gcr.io/hightowerlabs/alpine",
 		Name:         config.Name,
 		VolumeMounts: volumeMounts,
@@ -226,7 +273,7 @@ func createReplicaSet(config DeploymentConfig) error {
 
 	annotations := config.Annotations
 
-	binaryPath := filepath.Join("/bin", config.Name)
+	binaryPath := filepath.Join("/opt/bin", config.Name)
 	initContainers := []Container{
 		Container{
 			Name:    "install",
@@ -235,7 +282,7 @@ func createReplicaSet(config DeploymentConfig) error {
 			VolumeMounts: []VolumeMount{
 				VolumeMount{
 					Name:      "bin",
-					MountPath: "/bin",
+					MountPath: "/opt/bin",
 				},
 			},
 		},
@@ -246,7 +293,7 @@ func createReplicaSet(config DeploymentConfig) error {
 			VolumeMounts: []VolumeMount{
 				VolumeMount{
 					Name:      "bin",
-					MountPath: "/bin",
+					MountPath: "/opt/bin",
 				},
 			},
 		},

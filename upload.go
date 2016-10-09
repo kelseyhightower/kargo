@@ -3,7 +3,9 @@ package kargo
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,20 +22,21 @@ const (
 type UploadConfig struct {
 	BucketName string
 	ObjectName string
-	Path       string
 	ProjectID  string
+	Path       string
 }
 
-func Build(name string) (string, error) {
+func build(name string) (string, error) {
 	tmpDir, err := ioutil.TempDir("", "")
 	if err != nil {
 		return "", err
 	}
 	output := filepath.Join(tmpDir, name)
 
+	ldflags := `-extldflags "-static"`
 	command := []string{
 		"go", "build", "-o", output, "-a", "--ldflags",
-		"'-extldflags \"-static\"'", "-tags", "netgo",
+		ldflags, "-tags", "netgo",
 		"-installsuffix", "netgo", ".",
 	}
 	cmd := exec.Command(command[0], command[1:]...)
@@ -47,13 +50,24 @@ func Build(name string) (string, error) {
 
 	data, err := cmd.CombinedOutput()
 	if err != nil {
+		log.Println(string(data))
 		return "", err
 	}
 
-	return string(data), nil
+	return output, nil
 }
 
 func Upload(config UploadConfig) (string, error) {
+	if config.Path == "" {
+		log.Println("Building hello-universe ...")
+		output, err := build(config.ObjectName)
+		if err != nil {
+			return "", err
+		}
+		config.Path = output
+		log.Println("Build complete " + config.Path)
+	}
+
 	client, err := google.DefaultClient(context.Background(), scope)
 	if err != nil {
 		return "", err
@@ -108,6 +122,6 @@ func Upload(config UploadConfig) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
-	return response.SelfLink, nil
+	publicLink := fmt.Sprintf("https://storage.googleapis.com/%s/%s", response.Bucket, response.Name)
+	return publicLink, nil
 }
