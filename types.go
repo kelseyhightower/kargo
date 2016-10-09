@@ -33,12 +33,26 @@ type PodSpec struct {
 }
 
 type Container struct {
-	Args         []string      `json:"args"`
-	Command      []string      `json:"command"`
-	Image        string        `json:"image"`
-	Name         string        `json:"name"`
-	VolumeMounts []VolumeMount `json:"volumeMounts"`
+	Args         []string             `json:"args"`
+	Command      []string             `json:"command"`
+	Env          []EnvVar             `json:"env,omitempty"`
+	Image        string               `json:"image"`
+	Name         string               `json:"name"`
+	VolumeMounts []VolumeMount        `json:"volumeMounts"`
+	Resources    ResourceRequirements `json:"resources,omitempty"`
 }
+
+type EnvVar struct {
+	Name  string `json:"name"`
+	Value string `json:"value,omitempty"`
+}
+
+type ResourceRequirements struct {
+	Limits   ResourceList `json:"limits,omitempty"`
+	Requests ResourceList `json:"requests,omitempty"`
+}
+
+type ResourceList map[string]string
 
 type VolumeMount struct {
 	Name      string `json:"name"`
@@ -82,7 +96,7 @@ type Scale struct {
 	ApiVersion string    `json:"apiVersion,omitempty"`
 	Kind       string    `json:"kind,omitempty"`
 	Metadata   Metadata  `json:"metadata"`
-	Spec       ScaleSpec `json:"spec,omitempty"` 
+	Spec       ScaleSpec `json:"spec,omitempty"`
 }
 
 type ScaleSpec struct {

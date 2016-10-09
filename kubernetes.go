@@ -55,10 +55,8 @@ func getReplicaSet(name string) (*ReplicaSet, error) {
 	return &rs, nil
 }
 
-
 func getScale(name string) (*Scale, error) {
 	var scale Scale
-
 	path := fmt.Sprintf("%s/%s/scale", replicasetsEndpoint, name)
 
 	request := &http.Request{
@@ -195,6 +193,37 @@ func createReplicaSet(config DeploymentConfig) error {
 		VolumeMounts: volumeMounts,
 	}
 
+	resourceLimits := make(ResourceList)
+	if config.cpuLimit != "" {
+		resourceLimits["cpu"] = config.cpuLimit
+	}
+	if config.memoryLimit != "" {
+		resourceLimits["memory"] = config.memoryLimit
+	}
+
+	resourceRequests := make(ResourceList)
+	if config.cpuRequest != "" {
+		resourceRequests["cpu"] = config.cpuRequest
+	}
+	if config.memoryRequest != "" {
+		resourceRequests["memory"] = config.memoryRequest
+	}
+
+	if len(resourceLimits) > 0 {
+		container.Resources.Limits = resourceLimits
+	}
+	if len(resourceRequests) > 0 {
+		container.Resources.Requests = resourceRequests
+	}
+
+	if len(config.Env) > 0 {
+		env := make([]EnvVar, 0)
+		for name, value := range config.Env {
+			env = append(env, EnvVar{Name: name, Value: value})
+		}
+		container.Env = env
+	}
+
 	annotations := config.Annotations
 
 	binaryPath := filepath.Join("/bin", config.Name)
@@ -244,7 +273,7 @@ func createReplicaSet(config DeploymentConfig) error {
 				},
 				Spec: PodSpec{
 					Containers: []Container{container},
-					Volumes: volumes,
+					Volumes:    volumes,
 				},
 			},
 		},
