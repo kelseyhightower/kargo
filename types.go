@@ -5,9 +5,27 @@ type Metadata struct {
 	Namespace       string            `json:"namespace"`
 	GenerateName    string            `json:"generateName"`
 	ResourceVersion string            `json:"resourceVersion"`
+	SelfLink        string            `json:"selfLink"`
 	Labels          map[string]string `json:"labels"`
 	Annotations     map[string]string `json:"annotations"`
 	Uid             string            `json:"uid"`
+}
+
+type ListMetadata struct {
+	ResourceVersion string `json:"resourceVersion"`
+}
+
+type Pod struct {
+	Kind     string   `json:"kind,omitempty"`
+	Metadata Metadata `json:"metadata"`
+	Spec     PodSpec  `json:"spec"`
+}
+
+type PodList struct {
+	ApiVersion string       `json:"apiVersion"`
+	Kind       string       `json:"kind"`
+	Metadata   ListMetadata `json:"metadata"`
+	Items      []Pod        `json:"items"`
 }
 
 type ReplicaSet struct {
@@ -18,8 +36,13 @@ type ReplicaSet struct {
 }
 
 type ReplicaSetSpec struct {
-	Replicas int64       `json:"replicas,omitempty"`
-	Template PodTemplate `json:"template,omitempty"`
+	Replicas int64         `json:"replicas,omitempty"`
+	Selector LabelSelector `json:"selector,omitempty"`
+	Template PodTemplate   `json:"template,omitempty"`
+}
+
+type LabelSelector struct {
+	MatchLabels map[string]string `json:"matchLabels,omitempty"`
 }
 
 type PodTemplate struct {

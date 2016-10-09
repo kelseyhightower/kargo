@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
+	"google.golang.org/api/googleapi"
 	storage "google.golang.org/api/storage/v1"
 )
 
@@ -59,13 +60,13 @@ func build(name string) (string, error) {
 
 func Upload(config UploadConfig) (string, error) {
 	if config.Path == "" {
-		log.Println("Building hello-universe ...")
+		log.Printf("Building %s binary...", config.ObjectName)
 		output, err := build(config.ObjectName)
 		if err != nil {
 			return "", err
 		}
 		config.Path = output
-		log.Println("Build complete " + config.Path)
+		log.Println("Created: " + config.Path)
 	}
 
 	client, err := google.DefaultClient(context.Background(), scope)
@@ -105,6 +106,22 @@ func Upload(config UploadConfig) (string, error) {
 
 	objectName := filepath.Join(checksum, config.ObjectName)
 
+	publicLink := fmt.Sprintf("https://storage.googleapis.com/%s/%s", config.BucketName, objectName)
+	object, err := service.Objects.Get(config.BucketName, objectName).Do()
+
+	if object != nil {
+		if object.HTTPStatusCode == 200 {
+			log.Printf("Object %s already exists, skipping upload.", filepath.Join(config.BucketName, objectName))
+			return publicLink, nil
+		}
+	}
+
+	if err != nil {
+		if err.(*googleapi.Error).Code != 404 {
+			return "", err
+		}
+	}
+
 	acl := &storage.ObjectAccessControl{
 		Bucket: config.BucketName,
 		Entity: "allUsers",
@@ -112,16 +129,17 @@ func Upload(config UploadConfig) (string, error) {
 		Role:   "READER",
 	}
 
-	object := &storage.Object{
+	object = &storage.Object{
 		Acl:      []*storage.ObjectAccessControl{acl},
 		Name:     objectName,
 		Metadata: metadata,
 	}
 
-	response, err := service.Objects.Insert(config.BucketName, object).Media(f).Do()
+	log.Printf("Uploading %s to the %s bucket...", object.Name, config.BucketName)
+	_, err = service.Objects.Insert(config.BucketName, object).Media(f).Do()
 	if err != nil {
 		return "", err
 	}
-	publicLink := fmt.Sprintf("https://storage.googleapis.com/%s/%s", response.Bucket, response.Name)
+	log.Println("Upload complete.")
 	return publicLink, nil
 }

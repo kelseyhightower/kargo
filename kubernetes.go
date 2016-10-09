@@ -16,19 +16,22 @@ import (
 
 var (
 	apiHost             = "127.0.0.1:8001"
-	replicasetsEndpoint = "/apis/extensions/v1beta1/namespaces/default/replicasets"
+	replicasetsEndpoint = "/apis/extensions/v1beta1/namespaces/%s/replicasets"
+	replicasetEndpoint  = "/apis/extensions/v1beta1/namespaces/%s/replicasets/%s"
+	scaleEndpoint       = "/apis/extensions/v1beta1/namespaces/%s/replicasets/%s/scale"
 	logsEndpoint        = "/api/v1/namespaces/%s/pods/%s/log"
+	podsEndpoint        = "/api/v1/namespaces/%s/pods"
 )
 
 var ErrNotExist = errors.New("does not exist")
 
-func getLogs(name, namespace string) (io.Reader, error) {
-	var b bytes.Buffer
+func getPods(namespace, labelSelector string) (*PodList, error) {
+	var podList *PodList
 
 	v := url.Values{}
-	v.Set("follow", "true")
+	v.Set("labelSelector", labelSelector)
 
-	path := fmt.Sprintf(logsEndpoint, namespace, name)
+	path := fmt.Sprintf(podsEndpoint, namespace)
 	request := &http.Request{
 		Header: make(http.Header),
 		Method: http.MethodGet,
@@ -39,38 +42,107 @@ func getLogs(name, namespace string) (io.Reader, error) {
 			RawQuery: v.Encode(),
 		},
 	}
-
 	request.Header.Set("Accept", "application/json, */*")
+	log.Println(request.URL.String())
 
-	go func() {
-		for {
-			resp, err := http.DefaultClient.Do(request)
-			if err != nil {
-				time.Sleep(10 * time.Second)
-				log.Println(err)
-			}
+	resp, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return nil, err
+	}
 
-			if resp.StatusCode == 404 {
-				log.Println(ErrNotExist)
-			}
-			if resp.StatusCode != 200 {
-				log.Println(errors.New("Get deployment error non 200 reponse: " + resp.Status))
-			}
+	if resp.StatusCode == 404 {
+		log.Println("GET pods error: ", ErrNotExist)
+		return nil, ErrNotExist
+	}
+	if resp.StatusCode != 200 {
+		return nil, errors.New("Get pods error non 200 reponse: " + resp.Status)
+	}
 
-			if _, err := io.Copy(&b, resp.Body); err != nil {
-				log.Println(err)
-			}
-		}
-	}()
+	err = json.NewDecoder(resp.Body).Decode(&podList)
+	if err != nil {
+		return nil, err
+	}
+	return podList, nil
 
-	return &b, nil
 }
 
-func getReplicaSet(name string) (*ReplicaSet, error) {
+func getLogs(config DeploymentConfig, w io.Writer) error {
+	time.Sleep(10 * time.Second)
+	rs, err := getReplicaSet(config.Namespace, config.Name)
+	if err != nil {
+		return err
+	}
+
+	var labelSelector bytes.Buffer
+	for key, value := range rs.Spec.Selector.MatchLabels {
+		labelSelector.WriteString(fmt.Sprintf("%s=%s", key, value))
+	}
+
+	podList, err := getPods(config.Namespace, labelSelector.String())
+	if err != nil {
+		return err
+	}
+
+	for _, pod := range podList.Items {
+		v := url.Values{}
+		v.Set("follow", "true")
+
+		path := fmt.Sprintf(logsEndpoint, config.Namespace, pod.Metadata.Name)
+		request := &http.Request{
+			Header: make(http.Header),
+			Method: http.MethodGet,
+			URL: &url.URL{
+				Host:     apiHost,
+				Path:     path,
+				Scheme:   "http",
+				RawQuery: v.Encode(),
+			},
+		}
+		request.Header.Set("Accept", "application/json, */*")
+		log.Println(request.URL.String())
+
+		go func() {
+			for {
+				resp, err := http.DefaultClient.Do(request)
+				if err != nil {
+					log.Println(err)
+					time.Sleep(5 * time.Second)
+					continue
+				}
+
+				if resp.StatusCode == 404 {
+					data, err := ioutil.ReadAll(resp.Body)
+					if err != nil {
+						log.Println(err)
+						time.Sleep(5 * time.Second)
+						continue
+					}
+					log.Println(string(data))
+					log.Println("GET pod logs error: ", ErrNotExist)
+					log.Println(ErrNotExist)
+					time.Sleep(5 * time.Second)
+					continue
+				}
+				if resp.StatusCode != 200 {
+					log.Println(errors.New("Get replica set error non 200 reponse: " + resp.Status))
+					time.Sleep(5 * time.Second)
+					continue
+				}
+
+				if _, err := io.Copy(w, resp.Body); err != nil {
+					log.Println(err)
+				}
+			}
+		}()
+	}
+
+	return nil
+}
+
+func getReplicaSet(namespace, name string) (*ReplicaSet, error) {
 	var rs ReplicaSet
 
-	path := fmt.Sprintf("%s/%s", replicasetsEndpoint, name)
-
+	path := fmt.Sprintf(replicasetEndpoint, namespace, name)
 	request := &http.Request{
 		Header: make(http.Header),
 		Method: http.MethodGet,
@@ -80,7 +152,6 @@ func getReplicaSet(name string) (*ReplicaSet, error) {
 			Scheme: "http",
 		},
 	}
-
 	request.Header.Set("Accept", "application/json, */*")
 
 	resp, err := http.DefaultClient.Do(request)
@@ -102,10 +173,10 @@ func getReplicaSet(name string) (*ReplicaSet, error) {
 	return &rs, nil
 }
 
-func getScale(name string) (*Scale, error) {
+func getScale(namespace, name string) (*Scale, error) {
 	var scale Scale
-	path := fmt.Sprintf("%s/%s/scale", replicasetsEndpoint, name)
 
+	path := fmt.Sprintf(scaleEndpoint, namespace, name)
 	request := &http.Request{
 		Header: make(http.Header),
 		Method: http.MethodGet,
@@ -115,7 +186,6 @@ func getScale(name string) (*Scale, error) {
 			Scheme: "http",
 		},
 	}
-
 	request.Header.Set("Accept", "application/json, */*")
 
 	resp, err := http.DefaultClient.Do(request)
@@ -137,14 +207,12 @@ func getScale(name string) (*Scale, error) {
 	return &scale, nil
 }
 
-func scaleReplicaSet(name string, replicas int) error {
-	scale, err := getScale(name)
+func scaleReplicaSet(namespace, name string, replicas int) error {
+	scale, err := getScale(namespace, name)
 	if err != nil {
 		return err
 	}
-
 	scale.Spec.Replicas = int64(replicas)
-	path := fmt.Sprintf("%s/%s/scale", replicasetsEndpoint, name)
 
 	var b []byte
 	body := bytes.NewBuffer(b)
@@ -153,6 +221,7 @@ func scaleReplicaSet(name string, replicas int) error {
 		return err
 	}
 
+	path := fmt.Sprintf(scaleEndpoint, namespace, name)
 	request := &http.Request{
 		Body:          ioutil.NopCloser(body),
 		ContentLength: int64(body.Len()),
@@ -165,10 +234,12 @@ func scaleReplicaSet(name string, replicas int) error {
 		},
 	}
 	request.Header.Set("Content-Type", "application/json")
+
 	resp, err := http.DefaultClient.Do(request)
 	if err != nil {
 		return err
 	}
+
 	if resp.StatusCode == 404 {
 		return ErrNotExist
 	}
@@ -177,22 +248,20 @@ func scaleReplicaSet(name string, replicas int) error {
 		if err != nil {
 			return err
 		}
-
 		log.Println(string(data))
-
 		return errors.New("Scale ReplicaSet error non 200 reponse: " + resp.Status)
 	}
+
 	return nil
 }
 
-func deleteReplicaSet(name string) error {
-	err := scaleReplicaSet(name, 0)
+func deleteReplicaSet(config DeploymentConfig) error {
+	err := scaleReplicaSet(config.Namespace, config.Name, 0)
 	if err != nil {
 		return err
 	}
 
-	path := fmt.Sprintf("%s/%s", replicasetsEndpoint, name)
-
+	path := fmt.Sprintf(replicasetEndpoint, config.Namespace, config.Name)
 	request := &http.Request{
 		Header: make(http.Header),
 		Method: http.MethodDelete,
@@ -202,7 +271,6 @@ func deleteReplicaSet(name string) error {
 			Scheme: "http",
 		},
 	}
-
 	request.Header.Set("Accept", "application/json, */*")
 
 	resp, err := http.DefaultClient.Do(request)
@@ -216,6 +284,7 @@ func deleteReplicaSet(name string) error {
 	if resp.StatusCode != 200 {
 		return errors.New("Delete ReplicaSet error non 200 reponse: " + resp.Status)
 	}
+
 	return nil
 }
 
@@ -310,9 +379,15 @@ func createReplicaSet(config DeploymentConfig) error {
 	rs := ReplicaSet{
 		ApiVersion: "extensions/v1beta1",
 		Kind:       "ReplicaSet",
-		Metadata:   Metadata{Name: config.Name},
+		Metadata: Metadata{
+			Name:      config.Name,
+			Namespace: config.Namespace,
+		},
 		Spec: ReplicaSetSpec{
 			Replicas: int64(config.Replicas),
+			Selector: LabelSelector{
+				MatchLabels: config.Labels,
+			},
 			Template: PodTemplate{
 				Metadata: Metadata{
 					Labels:      config.Labels,
@@ -333,6 +408,7 @@ func createReplicaSet(config DeploymentConfig) error {
 		return err
 	}
 
+	path := fmt.Sprintf(replicasetsEndpoint, config.Namespace)
 	request := &http.Request{
 		Body:          ioutil.NopCloser(body),
 		ContentLength: int64(body.Len()),
@@ -340,7 +416,7 @@ func createReplicaSet(config DeploymentConfig) error {
 		Method:        http.MethodPost,
 		URL: &url.URL{
 			Host:   apiHost,
-			Path:   replicasetsEndpoint,
+			Path:   path,
 			Scheme: "http",
 		},
 	}
@@ -350,14 +426,15 @@ func createReplicaSet(config DeploymentConfig) error {
 	if err != nil {
 		return err
 	}
+
 	if resp.StatusCode != 201 {
 		data, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			return err
 		}
-
 		log.Println(string(data))
 		return errors.New("ReplicaSet: Unexpected HTTP status code" + resp.Status)
 	}
+
 	return nil
 }

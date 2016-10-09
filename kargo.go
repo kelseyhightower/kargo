@@ -1,7 +1,6 @@
 package kargo
 
 import (
-	"bytes"
 	"flag"
 	"io"
 )
@@ -12,16 +11,18 @@ var (
 	cpuRequest       string
 	memoryLimit      string
 	memoryRequest    string
+	namespace        string
 	replicas         int
 	EnableKubernetes bool
 )
 
 func init() {
-	flag.StringVar(&apiServer, "api-server", "http://127.0.0.1:8080", "Kubernetes API server")
+	flag.StringVar(&apiServer, "api-server", "http://127.0.0.1:8001", "Kubernetes API server")
 	flag.StringVar(&cpuLimit, "cpu-limit", "100m", "Max CPU in milicores")
 	flag.StringVar(&cpuRequest, "cpu-request", "100m", "Min CPU in milicores")
 	flag.StringVar(&memoryLimit, "memory-limit", "64M", "Max memory in MB")
 	flag.StringVar(&memoryRequest, "memory-request", "64M", "Min memory in MB")
+	flag.StringVar(&namespace, "namespace", "default", "The Kubernetes namespace.")
 	flag.IntVar(&replicas, "replicas", 1, "Number of replicas")
 	flag.BoolVar(&EnableKubernetes, "kubernetes", false, "Deploy to Kubernetes.")
 }
@@ -36,6 +37,7 @@ type DeploymentConfig struct {
 	memoryRequest string
 	memoryLimit   string
 	Name          string
+	Namespace     string
 	Replicas      int
 	Labels        map[string]string
 }
@@ -55,6 +57,7 @@ func (dm *DeploymentManager) Create(config DeploymentConfig) error {
 	config.memoryRequest = memoryRequest
 	config.memoryLimit = memoryLimit
 	config.Replicas = replicas
+	config.Namespace = namespace
 
 	if config.Env == nil {
 		config.Env = make(map[string]string)
@@ -66,14 +69,13 @@ func (dm *DeploymentManager) Create(config DeploymentConfig) error {
 		config.Labels = make(map[string]string)
 	}
 	dm.config = config
-	return createReplicaSet(config)
+	return createReplicaSet(dm.config)
 }
 
 func (dm *DeploymentManager) Delete() error {
-	return deleteReplicaSet(dm.config.Name)
+	return deleteReplicaSet(dm.config)
 }
 
-func (dm *DeploymentManager) Logs() (io.Reader, error) {
-	var b bytes.Buffer
-	return &b, nil
+func (dm *DeploymentManager) Logs(w io.Writer) error {
+	return getLogs(dm.config, w)
 }
