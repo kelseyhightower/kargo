@@ -76,7 +76,7 @@ func (dm *DeploymentManager) Create(config DeploymentConfig) error {
 }
 
 func (dm *DeploymentManager) Delete() error {
-	fmt.Printf("Deleting %s ReplicaSet...\n", config.Name)
+	fmt.Printf("Deleting %s ReplicaSet...\n", dm.config.Name)
 	return deleteReplicaSet(dm.config)
 }
 
