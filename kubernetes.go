@@ -48,7 +48,7 @@ func getPods(namespace, labelSelector string) (*PodList, error) {
 	}
 
 	if resp.StatusCode == 404 {
-		fmt.Println("GET pods error: ", ErrNotExist)
+		fmt.Println("No pods found using selector: ", labelSelector)
 		return nil, ErrNotExist
 	}
 	if resp.StatusCode != 200 {

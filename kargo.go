@@ -2,6 +2,7 @@ package kargo
 
 import (
 	"flag"
+	"fmt"
 	"io"
 )
 
@@ -69,10 +70,13 @@ func (dm *DeploymentManager) Create(config DeploymentConfig) error {
 		config.Labels = make(map[string]string)
 	}
 	dm.config = config
+
+	fmt.Printf("Creating %s ReplicaSet...\n", config.Name)
 	return createReplicaSet(dm.config)
 }
 
 func (dm *DeploymentManager) Delete() error {
+	fmt.Printf("Deleting %s ReplicaSet...\n", config.Name)
 	return deleteReplicaSet(dm.config)
 }
 
