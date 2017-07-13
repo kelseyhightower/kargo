@@ -51,8 +51,9 @@ type PodTemplate struct {
 }
 
 type PodSpec struct {
-	Containers []Container `json:"containers"`
-	Volumes    []Volume    `json:"volumes,omitempty"`
+	Containers     []Container `json:"containers"`
+	InitContainers []Container `json:"initContainers"`
+	Volumes        []Volume    `json:"volumes,omitempty"`
 }
 
 type Container struct {

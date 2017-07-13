@@ -366,12 +366,6 @@ func createReplicaSet(config DeploymentConfig) error {
 		},
 	}
 
-	ic, err := json.MarshalIndent(&initContainers, "", " ")
-	if err != nil {
-		return err
-	}
-	annotations["pod.alpha.kubernetes.io/init-containers"] = string(ic)
-
 	config.Labels["run"] = config.Name
 
 	rs := ReplicaSet{
@@ -388,12 +382,13 @@ func createReplicaSet(config DeploymentConfig) error {
 			},
 			Template: PodTemplate{
 				Metadata: Metadata{
-					Labels:      config.Labels,
 					Annotations: annotations,
+					Labels:      config.Labels,
 				},
 				Spec: PodSpec{
-					Containers: []Container{container},
-					Volumes:    volumes,
+					Containers:     []Container{container},
+					InitContainers: initContainers,
+					Volumes:        volumes,
 				},
 			},
 		},
@@ -401,7 +396,7 @@ func createReplicaSet(config DeploymentConfig) error {
 
 	var b []byte
 	body := bytes.NewBuffer(b)
-	err = json.NewEncoder(body).Encode(rs)
+	err := json.NewEncoder(body).Encode(rs)
 	if err != nil {
 		return err
 	}
